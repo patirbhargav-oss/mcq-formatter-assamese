@@ -9,7 +9,7 @@ st.set_page_config(page_title="MCQ Formatter", layout="wide")
 st.title("📚 Bhargav's MCQ Formatter (English & Assamese)")
 
 raw_text = st.text_area(
-    "Paste Questions Here (Supports English & Assamese)",
+    "Paste Questions Here (Supports Single-line & Multi-line Options)",
     height=400
 )
 
@@ -60,19 +60,36 @@ if st.button("Format MCQs"):
                         solution_lines.append(answer_text)
                 after_options = True
 
-            # 2. Parse Option lines (Handles: (a), a., (ক), ক., etc.)
-            elif re.match(r'^\(?(?:[A-Da-d]|[কখগঘ])[\.\)]', line):
-                option_text = re.sub(r'^\(?(?:[A-Da-d]|[কখগঘ])[\.\)]\s*', '', line)
-                options.append(option_text)
-                after_options = True
-
-            # 3. Everything after options becomes solution text
-            elif after_options:
-                solution_lines.append(line)
-
-            # 4. Question text accumulation
+            # 2. Parse Option lines (Handles both Single-line and Inline Packed Options)
             else:
-                question_lines.append(line)
+                # Find all option delimiters on this line (e.g., A), B), C), D) or (a), (b)...)
+                opt_matches = list(re.finditer(r'(?:^|\s)(\(?[A-Da-dকখগঘ][\.\)])(?=\s+|$)', line))
+                
+                # Check if this line qualifies as an options line
+                is_option_line = False
+                if opt_matches:
+                    first_marker = opt_matches[0].group(1).strip()
+                    # It's an option line if it starts with a marker OR contains multiple markers inline
+                    if line.strip().startswith(first_marker) or len(opt_matches) > 1:
+                        is_option_line = True
+                
+                if is_option_line:
+                    after_options = True
+                    # Dynamically slice the single line into individual options
+                    for i in range(len(opt_matches)):
+                        start_pos = opt_matches[i].end()
+                        end_pos = opt_matches[i+1].start() if i + 1 < len(opt_matches) else len(line)
+                        opt_text = line[start_pos:end_pos].strip()
+                        if opt_text:
+                            options.append(opt_text)
+                            
+                # 3. Everything after options becomes solution text
+                elif after_options:
+                    solution_lines.append(line)
+
+                # 4. Question text accumulation
+                else:
+                    question_lines.append(line)
 
         # Join question components
         question = "\n".join(question_lines)
