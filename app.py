@@ -100,6 +100,9 @@ if st.button("Format MCQs"):
         # Remove bracket prefix metadata if present
         question = re.sub(r'^\([^)]*\)\s*', '', question)
 
+        # --- NEW ADDITION: Force inline statement markers (I., II., 1., ২., etc.) onto new lines ---
+        question = re.sub(r'\s+(?=(?:[IVXivx]+|\d+|[০-৯]+)[\.\)]\s|\((?:[IVXivx]+|\d+|[০-৯]+)\)\s)', '\n', question)
+
         solution = "\n".join(solution_lines).strip()
 
         # Remove inline answers from solution if duplicated
