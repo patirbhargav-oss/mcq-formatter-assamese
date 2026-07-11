@@ -15,12 +15,13 @@ raw_text = st.text_area(
 
 if st.button("Format MCQs"):
 
-    # Split blocks on question headers (Handles 'Q1.', 'প্ৰশ্ন ১.', 'প্ৰ. ১.')
-    blocks = re.split(r'\n(?=(?:Q|প্ৰশ্ন|প্ৰ\.)\s*(?:\d+|[০-৯]+))', raw_text.strip())
+    # Smart Splitter: Recognizes prefixes (Q1., প্ৰশ্ন ১.) OR standalone multi-digit question numbers (121.)
+    # This safely ignores single-digit statement lists (1., 2.) inside a question body.
+    blocks = re.split(r'\n(?=(?:Q|প্ৰশ্ন|প্ৰ\.)\s*(?:\d+|[০-৯]+)[\.\)]|\s*(?:\d{2,}|[০-৯]{2,})[\.\)])', raw_text.strip())
 
     doc = Document()
 
-    # Expanded answer map to translate both formats to numeric indices
+    # Answer translation map
     answer_map = {
         "A": "1", "B": "2", "C": "3", "D": "4",
         "ক": "1", "খ": "2", "গ": "3", "ঘ": "4"
@@ -29,100 +30,63 @@ if st.button("Format MCQs"):
     total_questions = 0
 
     for block in blocks:
-
         if not block.strip():
             continue
 
-        lines = [x.strip() for x in block.split("\n") if x.strip()]
+        # Extract textual context using holistic block mapping instead of line-by-line loops
+        block_text = block.strip()
 
-        question_lines = []
-        options = []
-        solution_lines = []
+        # 1. Identify and extract the Answer and any trailing Solution text
+        ans_match = re.search(r'(?:correct\s+)?(answer|উত্তৰ)\s*:\s*\(?([a-dA-Dকখগঘ])[\.\)]?', block_text, re.IGNORECASE)
+        
         answer = ""
+        solution = ""
+        block_minus_answer = block_text
 
-        after_options = False
+        if ans_match:
+            answer = ans_match.group(2).upper()
+            ans_start = ans_match.start()
+            solution = block_text[ans_match.end():].strip()
+            # Isolate the question and options away from the answer tag
+            block_minus_answer = block_text[:ans_start].strip()
 
-        for line in lines:
+        # 2. Extract choice blocks based on regex boundary markers
+        opt_matches = list(re.finditer(r'(?:^|\s|\b)(\(?[A-Da-dকখগঘ][\.\)])(?=\s|$)', block_minus_answer))
+        
+        question = ""
+        options = []
 
-            # 1. Parse Answer Lines (Handles "Answer: (b)", "উত্তৰ: (খ)", etc.)
-            if line.lower().startswith("answer") or line.startswith("উত্তৰ"):
-                ans_match = re.search(r'(?:answer|উত্তৰ)\s*:\s*\(?([a-dA-Dকখগঘ])[\.\)]?', line, re.IGNORECASE)
-                if ans_match:
-                    answer = ans_match.group(1).upper()
-                    explanation_part = line[ans_match.end():].strip()
-                    if explanation_part:
-                        solution_lines.append(explanation_part)
-                else:
-                    answer_text = line.split(":", 1)[-1].strip()
-                    if len(answer_text) == 1:
-                        answer = answer_text.upper()
-                    else:
-                        solution_lines.append(answer_text)
-                after_options = True
+        if opt_matches:
+            # The question text is everything structural leading up to the very first choice item
+            question = block_minus_answer[:opt_matches[0].start()].strip()
+            
+            # Slice segments dynamically between choice keys
+            for i in range(len(opt_matches)):
+                start_pos = opt_matches[i].end()
+                end_pos = opt_matches[i+1].start() if i + 1 < len(opt_matches) else len(block_minus_answer)
+                opt_text = block_minus_answer[start_pos:end_pos].strip()
+                if opt_text:
+                    options.append(opt_text)
+        else:
+            # Fallback if no choice elements are targeted
+            question = block_minus_answer
 
-            # 2. Parse Option lines (Handles both Single-line and Inline Packed Options)
-            else:
-                # Find all option delimiters on this line (e.g., A), B), C), D) or (a), (b)...)
-                opt_matches = list(re.finditer(r'(?:^|\s)(\(?[A-Da-dকখগঘ][\.\)])(?=\s+|$)', line))
-                
-                # Check if this line qualifies as an options line
-                is_option_line = False
-                if opt_matches:
-                    first_marker = opt_matches[0].group(1).strip()
-                    # It's an option line if it starts with a marker OR contains multiple markers inline
-                    if line.strip().startswith(first_marker) or len(opt_matches) > 1:
-                        is_option_line = True
-                
-                if is_option_line:
-                    after_options = True
-                    # Dynamically slice the single line into individual options
-                    for i in range(len(opt_matches)):
-                        start_pos = opt_matches[i].end()
-                        end_pos = opt_matches[i+1].start() if i + 1 < len(opt_matches) else len(line)
-                        opt_text = line[start_pos:end_pos].strip()
-                        if opt_text:
-                            options.append(opt_text)
-                            
-                # 3. Everything after options becomes solution text
-                elif after_options:
-                    solution_lines.append(line)
-
-                # 4. Question text accumulation
-                else:
-                    question_lines.append(line)
-
-        # Join question components
-        question = "\n".join(question_lines)
-
-        # Remove prefix pattern (Handles 'Q99.', 'প্ৰশ্ন ৯৯.', 'প্ৰ. ৯৯.')
-        question = re.sub(r'^(?:Q|প্ৰশ্ন|প্ৰ\.)\s*(?:\d+|[০-৯]+)[\.\s]*', '', question)
-
-        # Remove bracket prefix metadata if present
+        # 3. Apply Clean Up Rules to the Question Field
+        # Strip leading numbers/headers (e.g., "121.", "Q99.")
+        question = re.sub(r'^(?:Q|প্ৰশ্ন|প্ৰ\.)?\s*(?:\d+|[০-৯]+)[\.\s)]*', '', question)
+        # Strip leading parenthetical metadata blocks
         question = re.sub(r'^\([^)]*\)\s*', '', question)
-
-        # Force inline statement markers (I., II., 1., ২., etc.) onto new lines
+        # Force individual statement tags (I., II., 1., ২.) down onto distinct lines
         question = re.sub(r'\s+(?=(?:[IVXivx]+|\d+|[০-৯]+)[\.\)]\s|\((?:[IVXivx]+|\d+|[০-৯]+)\)\s)', '\n', question)
-
-        # --- NEW ADDITION: Force final question prompt onto its own new line ---
+        # Force prompt inquiries ("Which of...", "তলৰ...") onto their own final line
         question = re.sub(r'\s+(?=(?:Which of|Choose the|Select the|ওপৰৰ|তলৰ|কোনটো|কোনবোৰ)(?:\s|$))', '\n', question)
 
-        solution = "\n".join(solution_lines).strip()
-
-        # Remove inline answers from solution if duplicated
-        solution = re.sub(
-            r'(?:Answer|উত্তৰ)\s*:\s*(?:[A-D]|[কখগঘ])',
-            '',
-            solution,
-            flags=re.IGNORECASE
-        ).strip()
-
-        # Numeric translation mapping
+        # Convert option characters to output numbers
         answer_numeric = answer_map.get(answer, answer)
 
-        # Create table configuration structure
+        # Build Output Table Architecture
         table = doc.add_table(rows=0, cols=2)
         table.style = "Table Grid"
-
         table.columns[0].width = Inches(1.3)
         table.columns[1].width = Inches(5.8)
 
@@ -133,7 +97,7 @@ if st.button("Format MCQs"):
             row[0].width = Inches(1.3)
             row[1].width = Inches(5.8)
 
-        # Populate structured output rows
+        # Assign records into target fields
         add_row("Question", question)
         add_row("Type", "multiple_choice")
 
