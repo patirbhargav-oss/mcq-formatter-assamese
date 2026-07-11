@@ -100,8 +100,11 @@ if st.button("Format MCQs"):
         # Remove bracket prefix metadata if present
         question = re.sub(r'^\([^)]*\)\s*', '', question)
 
-        # --- NEW ADDITION: Force inline statement markers (I., II., 1., ২., etc.) onto new lines ---
+        # Force inline statement markers (I., II., 1., ২., etc.) onto new lines
         question = re.sub(r'\s+(?=(?:[IVXivx]+|\d+|[০-৯]+)[\.\)]\s|\((?:[IVXivx]+|\d+|[০-৯]+)\)\s)', '\n', question)
+
+        # --- NEW ADDITION: Force final question prompt onto its own new line ---
+        question = re.sub(r'\s+(?=(?:Which of|Choose the|Select the|ওপৰৰ|তলৰ|কোনটো|কোনবোৰ)(?:\s|$))', '\n', question)
 
         solution = "\n".join(solution_lines).strip()
 
@@ -139,8 +142,8 @@ if st.button("Format MCQs"):
 
         add_row("Answer", answer_numeric)
         add_row("Solution", solution)
-        add_row("Positive Marks", "1")
-        add_row("Negative Marks", "0.25")
+        add_row("Positive Marks", "2")
+        add_row("Negative Marks", "0.5")
 
         doc.add_paragraph()
         total_questions += 1
