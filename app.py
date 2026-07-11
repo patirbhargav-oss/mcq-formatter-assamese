@@ -136,8 +136,8 @@ if st.button("Format MCQs"):
 
         add_row("Answer", answer_numeric)
         add_row("Solution", solution)
-        add_row("Positive Marks", "2")
-        add_row("Negative Marks", "0.5")
+        add_row("Positive Marks", "1")
+        add_row("Negative Marks", "0.25")
 
         doc.add_paragraph()
         total_questions += 1
